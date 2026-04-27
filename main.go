@@ -3,6 +3,7 @@ package main
 import (
 	"database/sql"
 	"fmt"
+	"net/http"
 	"os"
 
 	_ "github.com/lib/pq"
@@ -11,8 +12,9 @@ import (
 )
 
 type state struct {
-	db  *database.Queries
-	cfg *config.Config
+	db     *database.Queries
+	cfg    *config.Config
+	client *http.Client
 }
 
 func main() {
@@ -30,10 +32,14 @@ func main() {
 	}
 	dbQueries := database.New(db)
 
+	//initialize client
+	c := &http.Client{}
+
 	// set current state
 	s := &state{
-		db:  dbQueries,
-		cfg: &cfg,
+		db:     dbQueries,
+		cfg:    &cfg,
+		client: c,
 	}
 
 	// create commands struct
@@ -46,6 +52,7 @@ func main() {
 	cmds.register("register", handlerRegister)
 	cmds.register("reset", handlerReset)
 	cmds.register("users", handlerUsers)
+	cmds.register("agg", aggHandler)
 
 	input := os.Args
 	if len(input) < 2 {

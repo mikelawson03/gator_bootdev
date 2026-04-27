@@ -2,7 +2,11 @@ package main
 
 import (
 	"context"
+	"encoding/xml"
 	"fmt"
+	"html"
+	"io"
+	"net/http"
 	"time"
 
 	"github.com/google/uuid"
@@ -16,6 +20,22 @@ type commands struct {
 type command struct {
 	name string
 	args []string
+}
+
+type RSSFeed struct {
+	Channel struct {
+		Title       string    `xml:"title"`
+		Link        string    `xml:"link"`
+		Description string    `xml:"description"`
+		Item        []RSSItem `xml:"item"`
+	} `xml:"channel"`
+}
+
+type RSSItem struct {
+	Title       string `xml:"title"`
+	Link        string `xml:"link"`
+	Description string `xml:"description"`
+	PubDate     string `xml:"pubDate"`
 }
 
 func (c *commands) run(s *state, cmd command) error {
@@ -32,6 +52,46 @@ func (c *commands) run(s *state, cmd command) error {
 
 func (c *commands) register(name string, f func(*state, command) error) {
 	c.cmds[name] = f
+}
+
+func (f *RSSFeed) unescapeFeed() {
+	f.Channel.Title = html.UnescapeString(f.Channel.Title)
+	f.Channel.Description = html.UnescapeString((f.Channel.Description))
+
+	for i := range f.Channel.Item {
+		f.Channel.Item[i].Title = html.UnescapeString((f.Channel.Item[i].Title))
+		f.Channel.Item[i].Description = html.UnescapeString(f.Channel.Item[i].Description)
+	}
+}
+
+func fetchFeed(ctx context.Context, client *http.Client, feedURL string) (*RSSFeed, error) {
+	feed := &RSSFeed{}
+
+	req, err := http.NewRequestWithContext(ctx, "GET", feedURL, nil)
+	if err != nil {
+		return feed, err
+	}
+
+	req.Header.Set("User-Agent", "gator")
+	res, err := client.Do(req)
+	if err != nil {
+		return feed, err
+	}
+	defer res.Body.Close()
+
+	body, err := io.ReadAll(res.Body)
+	if err != nil {
+		return feed, err
+	}
+
+	if err := xml.Unmarshal(body, feed); err != nil {
+		return feed, err
+	}
+
+	feed.unescapeFeed()
+
+	return feed, nil
+
 }
 
 func handlerLogin(s *state, cmd command) error {
@@ -105,5 +165,15 @@ func handlerUsers(s *state, cmd command) error {
 		fmt.Print("\n")
 	}
 
+	return nil
+}
+
+func aggHandler(s *state, cmd command) error {
+	f, err := fetchFeed(context.Background(), s.client, "https://www.wagslane.dev/index.xml")
+	if err != nil {
+		return err
+	}
+
+	fmt.Println(*f)
 	return nil
 }
