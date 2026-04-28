@@ -53,6 +53,8 @@ func main() {
 	cmds.register("reset", handlerReset)
 	cmds.register("users", handlerUsers)
 	cmds.register("agg", aggHandler)
+	cmds.register("addfeed", addFeedHandler)
+	cmds.register("feeds", feedsHandler)
 
 	input := os.Args
 	if len(input) < 2 {

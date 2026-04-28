@@ -177,3 +177,49 @@ func aggHandler(s *state, cmd command) error {
 	fmt.Println(*f)
 	return nil
 }
+
+func addFeedHandler(s *state, cmd command) error {
+	if len(cmd.args) < 2 {
+		return fmt.Errorf("addfeed command requires feed name and url. Syntax: go run . register <name> <url>")
+	}
+
+	user, err := s.db.GetUser(context.Background(), s.cfg.CurrentUserName)
+	if err != nil {
+		return err
+	}
+
+	p := database.CreateFeedParams{
+		ID:        uuid.New(),
+		CreatedAt: time.Now(),
+		UpdatedAt: time.Now(),
+		Name:      cmd.args[0],
+		Url:       cmd.args[1],
+		UserID:    user.ID,
+	}
+
+	feed, err := s.db.CreateFeed(context.Background(), p)
+	if err != nil {
+		return err
+	}
+
+	fmt.Println(feed)
+
+	return nil
+}
+
+func feedsHandler(s *state, cmd command) error {
+	feeds, err := s.db.GetFeeds(context.Background())
+	if err != nil {
+		return err
+	}
+
+	for _, item := range feeds {
+		user, err := s.db.GetUserById(context.Background(), item.UserID)
+		if err != nil {
+			return err
+		}
+
+		fmt.Printf("Feed name: %s\nURL: %s\nAdded by: %s\n\n", item.Name, item.Url, user.Name)
+	}
+	return nil
+}
