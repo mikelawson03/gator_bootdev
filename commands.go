@@ -64,6 +64,17 @@ func (f *RSSFeed) unescapeFeed() {
 	}
 }
 
+func middlewareLoggedIn(handler func(s *state, cmd command, user database.User) error) func(*state, command) error {
+	return func(s *state, cmd command) error {
+		user, err := s.db.GetUser(context.Background(), s.cfg.CurrentUserName)
+		if err != nil {
+			return err
+		}
+
+		return handler(s, cmd, user)
+	}
+}
+
 func fetchFeed(ctx context.Context, client *http.Client, feedURL string) (*RSSFeed, error) {
 	feed := &RSSFeed{}
 
@@ -168,7 +179,7 @@ func handlerUsers(s *state, cmd command) error {
 	return nil
 }
 
-func aggHandler(s *state, cmd command) error {
+func handlerAgg(s *state, cmd command) error {
 	f, err := fetchFeed(context.Background(), s.client, "https://www.wagslane.dev/index.xml")
 	if err != nil {
 		return err
@@ -178,14 +189,9 @@ func aggHandler(s *state, cmd command) error {
 	return nil
 }
 
-func addFeedHandler(s *state, cmd command) error {
-	if len(cmd.args) < 2 {
-		return fmt.Errorf("addfeed command requires feed name and url. Syntax: go run . register <name> <url>")
-	}
-
-	user, err := s.db.GetUser(context.Background(), s.cfg.CurrentUserName)
-	if err != nil {
-		return err
+func HandlerAddFeed(s *state, cmd command, user database.User) error {
+	if len(cmd.args) != 2 {
+		return fmt.Errorf("addfeed command requires feed name and url. Syntax: go run . addfeed <name> <url>")
 	}
 
 	p := database.CreateFeedParams{
@@ -202,12 +208,27 @@ func addFeedHandler(s *state, cmd command) error {
 		return err
 	}
 
-	fmt.Println(feed)
+	fmt.Println("New feed", feed.Name, "added.")
+
+	new_follow := database.CreateFeedFollowParams{
+		ID:        uuid.New(),
+		CreatedAt: time.Now(),
+		UpdatedAt: time.Now(),
+		UserID:    user.ID,
+		FeedID:    feed.ID,
+	}
+
+	res, err := s.db.CreateFeedFollow(context.Background(), new_follow)
+	if err != nil {
+		return err
+	}
+
+	fmt.Println("Current user", res.UserName, "now following", res.FeedName)
 
 	return nil
 }
 
-func feedsHandler(s *state, cmd command) error {
+func handlerFeeds(s *state, cmd command) error {
 	feeds, err := s.db.GetFeeds(context.Background())
 	if err != nil {
 		return err
@@ -221,5 +242,70 @@ func feedsHandler(s *state, cmd command) error {
 
 		fmt.Printf("Feed name: %s\nURL: %s\nAdded by: %s\n\n", item.Name, item.Url, user.Name)
 	}
+	return nil
+}
+
+func handlerFollow(s *state, cmd command, user database.User) error {
+	if len(cmd.args) == 0 {
+		return fmt.Errorf("follow command requires feed url. Syntax: go run . follow <url>")
+	}
+
+	feedid, err := s.db.GetFeedByUrl(context.Background(), cmd.args[0])
+	if err != nil {
+		return err
+	}
+
+	p := database.CreateFeedFollowParams{
+		ID:        uuid.New(),
+		CreatedAt: time.Now(),
+		UpdatedAt: time.Now(),
+		UserID:    user.ID,
+		FeedID:    feedid.ID,
+	}
+
+	res, err := s.db.CreateFeedFollow(context.Background(), p)
+
+	fmt.Println(res)
+	fmt.Printf("User %s now following feed %s\n", res.UserName, res.FeedName)
+
+	return nil
+}
+
+func handlerFollowing(s *state, cmd command, user database.User) error {
+
+	res, err := s.db.GetFollowsByUserId(context.Background(), user.ID)
+	if err != nil {
+		return err
+	}
+
+	fmt.Println("Current follows for", user.Name)
+
+	for _, row := range res {
+		fmt.Println(row.FeedName)
+	}
+
+	return nil
+}
+
+func handlerUnfollow(s *state, cmd command, user database.User) error {
+	if len(cmd.args) == 0 {
+		return fmt.Errorf("unfollow command requires feed url. Syntax: go run . unfollow <url>")
+	}
+	res, err := s.db.GetFeedByUrl(context.Background(), cmd.args[0])
+	if err != nil {
+		return err
+	}
+
+	p := database.DeleteFeedFollowParams{
+		UserID: user.ID,
+		FeedID: res.ID,
+	}
+
+	if err = s.db.DeleteFeedFollow(context.Background(), p); err != nil {
+		return err
+	}
+
+	fmt.Printf("Feed %s unfollowed by %s\n", res.Name, user.Name)
+
 	return nil
 }
