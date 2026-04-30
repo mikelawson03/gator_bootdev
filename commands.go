@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"database/sql"
 	"encoding/xml"
 	"fmt"
 	"html"
@@ -105,6 +106,36 @@ func fetchFeed(ctx context.Context, client *http.Client, feedURL string) (*RSSFe
 
 }
 
+func scrapeFeeds(s *state) error {
+	res, err := s.db.GetNextFeedToFetch(context.Background())
+	if err != nil {
+		return err
+	}
+
+	feed, err := fetchFeed(context.Background(), s.client, res.Url)
+	if err != nil {
+		return err
+	}
+
+	fmt.Println(feed.Channel.Title)
+
+	p := database.MarkFeedFetchedParams{
+		LastFetchedAt: sql.NullTime{
+			Time:  time.Now(),
+			Valid: true},
+		UpdatedAt: time.Now(),
+		ID:        res.ID,
+	}
+
+	s.db.MarkFeedFetched(context.Background(), p)
+
+	for _, item := range feed.Channel.Item {
+		fmt.Println(item)
+	}
+
+	return nil
+}
+
 func handlerLogin(s *state, cmd command) error {
 	if len(cmd.args) == 0 {
 		return fmt.Errorf("Login command requires username. Syntax: go run . login <username>")
@@ -180,12 +211,9 @@ func handlerUsers(s *state, cmd command) error {
 }
 
 func handlerAgg(s *state, cmd command) error {
-	f, err := fetchFeed(context.Background(), s.client, "https://www.wagslane.dev/index.xml")
-	if err != nil {
+	if err := scrapeFeeds(s); err != nil {
 		return err
 	}
-
-	fmt.Println(*f)
 	return nil
 }
 
