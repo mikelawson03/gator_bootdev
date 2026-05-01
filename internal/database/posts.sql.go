@@ -66,7 +66,7 @@ func (q *Queries) CreatePost(ctx context.Context, arg CreatePostParams) (Post, e
 const getPostsByUserId = `-- name: GetPostsByUserId :many
 SELECT posts.id, posts.created_at, posts.updated_at, title, url, description, published_at, posts.feed_id, feed_follows.id, feed_follows.created_at, feed_follows.updated_at, user_id, feed_follows.feed_id
 FROM posts
-JOIN feed_follows on posts.feed_id = feed_follows.id
+JOIN feed_follows on posts.feed_id = feed_follows.feed_id
 WHERE feed_follows.user_id = $1
 LIMIT $2
 `

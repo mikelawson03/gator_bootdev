@@ -184,15 +184,21 @@ func handlerBrowse(s *state, cmd command) error {
 		}
 		p.Limit = int32(l)
 	}
+
 	posts, err := s.db.GetPostsByUserId(context.Background(), p)
 	if err != nil {
 		return err
 	}
 
-	fmt.Print(posts)
+	// fmt.Print(posts)
 
-	for item := range posts {
-		fmt.Println(item)
+	for _, item := range posts {
+		fmt.Println(item.Title)
+		fmt.Println(item.Url)
+		fmt.Println(item.Description)
+		fmt.Println(item.PublishedAt)
+		fmt.Println("--------------------")
+		fmt.Println()
 	}
 
 	return nil
