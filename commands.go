@@ -8,9 +8,11 @@ import (
 	"html"
 	"io"
 	"net/http"
+	"strconv"
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/lib/pq"
 	"github.com/mikelawson03/gator_bootdev/internal/database"
 )
 
@@ -155,6 +157,45 @@ func handlerAgg(s *state, cmd command) error {
 		}
 
 	}
+}
+
+func handlerBrowse(s *state, cmd command) error {
+	user, err := s.db.GetUser(context.Background(), s.cfg.CurrentUserName)
+	if err != nil {
+		return err
+	}
+
+	p := database.GetPostsByUserIdParams{
+		UserID: user.ID,
+	}
+
+	if len(cmd.args) < 1 {
+		p.Limit = 2
+	}
+	if len(cmd.args) > 0 {
+		l, err := strconv.Atoi(cmd.args[0])
+		if err != nil {
+			return err
+		}
+		var limit interface{} = l
+		_, ok := limit.(int)
+		if !ok {
+			return fmt.Errorf("browse's optional limit must be an integer. Syntax: go run . browse <limit>")
+		}
+		p.Limit = int32(l)
+	}
+	posts, err := s.db.GetPostsByUserId(context.Background(), p)
+	if err != nil {
+		return err
+	}
+
+	fmt.Print(posts)
+
+	for item := range posts {
+		fmt.Println(item)
+	}
+
+	return nil
 }
 
 func handlerFeeds(s *state, cmd command) error {
@@ -347,7 +388,7 @@ func scrapeFeeds(s *state) error {
 
 	s.db.MarkFeedFetched(context.Background(), p)
 
-	fmt.Printf("Feed %s has posts to save", feed.Channel.Title)
+	fmt.Printf("Saving posts from %s\n", feed.Channel.Title)
 
 	for _, item := range feed.Channel.Item {
 		if err := savePost(s, item, res.ID); err != nil {
@@ -377,10 +418,15 @@ func savePost(s *state, item RSSItem, feedId uuid.UUID) error {
 
 	post, err := s.db.CreatePost(context.Background(), p)
 	if err != nil {
+		if pqErr, ok := err.(*pq.Error); ok {
+			if pqErr.Code == "23505" {
+				return nil
+			}
+		}
 		return err
 	}
 
-	fmt.Printf("Post '%s' saved to database", post.Title)
+	fmt.Printf("Post '%s' saved to database\n", post.Title)
 
 	return nil
 
