@@ -99,7 +99,7 @@ func fetchFeed(ctx context.Context, client *http.Client, feedURL string) (*RSSFe
 
 func handlerAddFeed(s *state, cmd command, user database.User) error {
 	if len(cmd.args) != 2 {
-		return fmt.Errorf("addfeed command requires feed name and url. Syntax: go run . addfeed <name> <url>")
+		return fmt.Errorf("addfeed command requires feed name and url. Syntax: gator_bootdev addfeed <name> <url>")
 	}
 
 	p := database.CreateFeedParams{
@@ -138,7 +138,7 @@ func handlerAddFeed(s *state, cmd command, user database.User) error {
 
 func handlerAgg(s *state, cmd command) error {
 	if len(cmd.args) == 0 {
-		return fmt.Errorf("agg command requires duration. Syntax: go run . agg <duration>")
+		return fmt.Errorf("agg command requires duration. Syntax: gator_bootdev agg <duration>")
 	}
 
 	t, err := time.ParseDuration(cmd.args[0])
