@@ -223,7 +223,7 @@ func handlerFeeds(s *state, cmd command) error {
 
 func handlerFollow(s *state, cmd command, user database.User) error {
 	if len(cmd.args) == 0 {
-		return fmt.Errorf("follow command requires feed url. Syntax: go run . follow <url>")
+		return fmt.Errorf("follow command requires feed url. Syntax: gator_bootdev follow <url>")
 	}
 
 	feedid, err := s.db.GetFeedByUrl(context.Background(), cmd.args[0])
@@ -265,7 +265,7 @@ func handlerFollowing(s *state, cmd command, user database.User) error {
 
 func handlerLogin(s *state, cmd command) error {
 	if len(cmd.args) == 0 {
-		return fmt.Errorf("Login command requires username. Syntax: go run . login <username>")
+		return fmt.Errorf("login command requires username. Syntax: gator_bootdev login <username>")
 	}
 
 	username := cmd.args[0]
@@ -286,7 +286,7 @@ func handlerLogin(s *state, cmd command) error {
 
 func handlerRegister(s *state, cmd command) error {
 	if len(cmd.args) == 0 {
-		return fmt.Errorf("Register command requires username. Syntax: go run . register <username>")
+		return fmt.Errorf("register command requires username. Syntax: gator_bootdev register <username>")
 	}
 
 	p := database.CreateUserParams{
@@ -318,7 +318,7 @@ func handlerReset(s *state, cmd command) error {
 
 func handlerUnfollow(s *state, cmd command, user database.User) error {
 	if len(cmd.args) == 0 {
-		return fmt.Errorf("unfollow command requires feed url. Syntax: go run . unfollow <url>")
+		return fmt.Errorf("unfollow command requires feed url. Syntax: gator_bootdev unfollow <url>")
 	}
 	res, err := s.db.GetFeedByUrl(context.Background(), cmd.args[0])
 	if err != nil {
@@ -346,7 +346,7 @@ func handlerUsers(s *state, cmd command) error {
 	}
 
 	if len(users) == 0 {
-		fmt.Println("No users found. Add users with go run . register <username>")
+		fmt.Println("No users found. Add users with go gator_bootdev register <username>")
 	}
 
 	for _, user := range users {
