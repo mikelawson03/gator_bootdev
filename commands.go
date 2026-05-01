@@ -65,17 +65,6 @@ func (f *RSSFeed) unescapeFeed() {
 	}
 }
 
-func middlewareLoggedIn(handler func(s *state, cmd command, user database.User) error) func(*state, command) error {
-	return func(s *state, cmd command) error {
-		user, err := s.db.GetUser(context.Background(), s.cfg.CurrentUserName)
-		if err != nil {
-			return err
-		}
-
-		return handler(s, cmd, user)
-	}
-}
-
 func fetchFeed(ctx context.Context, client *http.Client, feedURL string) (*RSSFeed, error) {
 	feed := &RSSFeed{}
 
@@ -106,118 +95,7 @@ func fetchFeed(ctx context.Context, client *http.Client, feedURL string) (*RSSFe
 
 }
 
-func scrapeFeeds(s *state) error {
-	res, err := s.db.GetNextFeedToFetch(context.Background())
-	if err != nil {
-		return err
-	}
-
-	feed, err := fetchFeed(context.Background(), s.client, res.Url)
-	if err != nil {
-		return err
-	}
-
-	fmt.Println(feed.Channel.Title)
-
-	p := database.MarkFeedFetchedParams{
-		LastFetchedAt: sql.NullTime{
-			Time:  time.Now(),
-			Valid: true},
-		UpdatedAt: time.Now(),
-		ID:        res.ID,
-	}
-
-	s.db.MarkFeedFetched(context.Background(), p)
-
-	for _, item := range feed.Channel.Item {
-		fmt.Println(item)
-	}
-
-	return nil
-}
-
-func handlerLogin(s *state, cmd command) error {
-	if len(cmd.args) == 0 {
-		return fmt.Errorf("Login command requires username. Syntax: go run . login <username>")
-	}
-
-	username := cmd.args[0]
-
-	if _, err := s.db.GetUser(context.Background(), username); err != nil {
-		return err
-	}
-
-	s.cfg.CurrentUserName = username
-	if err := s.cfg.SetUser(); err != nil {
-		return fmt.Errorf("Error setting user")
-	}
-
-	fmt.Println(s.cfg.CurrentUserName, "logged in successfully")
-
-	return nil
-}
-
-func handlerRegister(s *state, cmd command) error {
-	if len(cmd.args) == 0 {
-		return fmt.Errorf("Register command requires username. Syntax: go run . register <username>")
-	}
-
-	p := database.CreateUserParams{
-		ID:        uuid.New(),
-		CreatedAt: time.Now(),
-		UpdatedAt: time.Now(),
-		Name:      cmd.args[0],
-	}
-
-	u, err := s.db.CreateUser(context.Background(), p)
-	if err != nil {
-		return err
-	}
-
-	s.cfg.CurrentUserName = u.Name
-	s.cfg.SetUser()
-	fmt.Printf("User %v has been created\n", u.Name)
-	fmt.Println(u)
-	return nil
-}
-
-func handlerReset(s *state, cmd command) error {
-	if err := s.db.Reset(context.Background()); err != nil {
-		return err
-	}
-	fmt.Println("Table reset.")
-	return nil
-}
-
-func handlerUsers(s *state, cmd command) error {
-	users, err := s.db.GetUsers(context.Background())
-	if err != nil {
-		return err
-	}
-
-	if len(users) == 0 {
-		fmt.Println("No users found. Add users with go run . register <username>")
-	}
-
-	for _, user := range users {
-		fmt.Print("* ", user.Name)
-		if user.Name == s.cfg.CurrentUserName {
-			fmt.Print(" (current)")
-		}
-		fmt.Print("\n")
-	}
-
-	return nil
-}
-
-func handlerAgg(s *state, cmd command) error {
-	if err := scrapeFeeds(s); err != nil {
-		return err
-	}
-	return nil
-}
-
-func HandlerAddFeed(s *state, cmd command, user database.User) error {
+func handlerAddFeed(s *state, cmd command, user database.User) error {
 	if len(cmd.args) != 2 {
 		return fmt.Errorf("addfeed command requires feed name and url. Syntax: go run . addfeed <name> <url>")
 	}
@@ -254,6 +132,29 @@ func HandlerAddFeed(s *state, cmd command, user database.User) error {
 	fmt.Println("Current user", res.UserName, "now following", res.FeedName)
 
 	return nil
+}
+
+func handlerAgg(s *state, cmd command) error {
+	if len(cmd.args) == 0 {
+		return fmt.Errorf("agg command requires duration. Syntax: go run . agg <duration>")
+	}
+
+	t, err := time.ParseDuration(cmd.args[0])
+	if err != nil {
+		return err
+	}
+
+	fmt.Printf("Collecting feeds every %s\n", t.String())
+
+	ticker := time.NewTicker(t)
+
+	for ; ; <-ticker.C {
+
+		if err := scrapeFeeds(s); err != nil {
+			fmt.Println(err)
+		}
+
+	}
 }
 
 func handlerFeeds(s *state, cmd command) error {
@@ -315,6 +216,59 @@ func handlerFollowing(s *state, cmd command, user database.User) error {
 	return nil
 }
 
+func handlerLogin(s *state, cmd command) error {
+	if len(cmd.args) == 0 {
+		return fmt.Errorf("Login command requires username. Syntax: go run . login <username>")
+	}
+
+	username := cmd.args[0]
+
+	if _, err := s.db.GetUser(context.Background(), username); err != nil {
+		return err
+	}
+
+	s.cfg.CurrentUserName = username
+	if err := s.cfg.SetUser(); err != nil {
+		return fmt.Errorf("Error setting user")
+	}
+
+	fmt.Println(s.cfg.CurrentUserName, "logged in successfully")
+
+	return nil
+}
+
+func handlerRegister(s *state, cmd command) error {
+	if len(cmd.args) == 0 {
+		return fmt.Errorf("Register command requires username. Syntax: go run . register <username>")
+	}
+
+	p := database.CreateUserParams{
+		ID:        uuid.New(),
+		CreatedAt: time.Now(),
+		UpdatedAt: time.Now(),
+		Name:      cmd.args[0],
+	}
+
+	u, err := s.db.CreateUser(context.Background(), p)
+	if err != nil {
+		return err
+	}
+
+	s.cfg.CurrentUserName = u.Name
+	s.cfg.SetUser()
+	fmt.Printf("User %v has been created\n", u.Name)
+	fmt.Println(u)
+	return nil
+}
+
+func handlerReset(s *state, cmd command) error {
+	if err := s.db.Reset(context.Background()); err != nil {
+		return err
+	}
+	fmt.Println("Table reset.")
+	return nil
+}
+
 func handlerUnfollow(s *state, cmd command, user database.User) error {
 	if len(cmd.args) == 0 {
 		return fmt.Errorf("unfollow command requires feed url. Syntax: go run . unfollow <url>")
@@ -336,4 +290,98 @@ func handlerUnfollow(s *state, cmd command, user database.User) error {
 	fmt.Printf("Feed %s unfollowed by %s\n", res.Name, user.Name)
 
 	return nil
+}
+
+func handlerUsers(s *state, cmd command) error {
+	users, err := s.db.GetUsers(context.Background())
+	if err != nil {
+		return err
+	}
+
+	if len(users) == 0 {
+		fmt.Println("No users found. Add users with go run . register <username>")
+	}
+
+	for _, user := range users {
+		fmt.Print("* ", user.Name)
+		if user.Name == s.cfg.CurrentUserName {
+			fmt.Print(" (current)")
+		}
+		fmt.Print("\n")
+	}
+
+	return nil
+}
+
+func middlewareLoggedIn(handler func(s *state, cmd command, user database.User) error) func(*state, command) error {
+	return func(s *state, cmd command) error {
+		user, err := s.db.GetUser(context.Background(), s.cfg.CurrentUserName)
+		if err != nil {
+			return err
+		}
+
+		return handler(s, cmd, user)
+	}
+}
+
+func scrapeFeeds(s *state) error {
+	res, err := s.db.GetNextFeedToFetch(context.Background())
+	if err != nil {
+		return err
+	}
+
+	feed, err := fetchFeed(context.Background(), s.client, res.Url)
+	if err != nil {
+		return err
+	}
+
+	fmt.Println(feed.Channel.Title)
+
+	p := database.MarkFeedFetchedParams{
+		LastFetchedAt: sql.NullTime{
+			Time:  time.Now(),
+			Valid: true},
+		UpdatedAt: time.Now(),
+		ID:        res.ID,
+	}
+
+	s.db.MarkFeedFetched(context.Background(), p)
+
+	fmt.Printf("Feed %s has posts to save", feed.Channel.Title)
+
+	for _, item := range feed.Channel.Item {
+		if err := savePost(s, item, res.ID); err != nil {
+			fmt.Println(err)
+		}
+	}
+
+	return nil
+}
+
+func savePost(s *state, item RSSItem, feedId uuid.UUID) error {
+	pubDate, err := time.Parse("Mon, 02 Jan 2006 15:04:05 -0700", item.PubDate)
+	if err != nil {
+		return err
+	}
+
+	p := database.CreatePostParams{
+		ID:          uuid.New(),
+		CreatedAt:   time.Now(),
+		UpdatedAt:   time.Now(),
+		Title:       item.Title,
+		Url:         item.Link,
+		Description: item.Description,
+		PublishedAt: pubDate,
+		FeedID:      feedId,
+	}
+
+	post, err := s.db.CreatePost(context.Background(), p)
+	if err != nil {
+		return err
+	}
+
+	fmt.Printf("Post '%s' saved to database", post.Title)
+
+	return nil
+
 }
